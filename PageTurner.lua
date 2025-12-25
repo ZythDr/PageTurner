@@ -90,12 +90,19 @@ local function BookHandler()
     end
 end
 
--- ✅ SPELLBOOK (the missing piece)
 local function SpellBookHandler()
     if arg1 < 0 then
         return ClickIfEnabled(SpellBookNextPageButton)
     else
         return ClickIfEnabled(SpellBookPrevPageButton)
+    end
+end
+
+local function ItemTextHandler()
+    if arg1 < 0 then
+        return ClickIfEnabled(ItemTextNextPageButton)
+    else
+        return ClickIfEnabled(ItemTextPrevPageButton)
     end
 end
 
@@ -128,6 +135,10 @@ local function TryHookFrames()
     if SpellBookFrame and SpellBookFrame:IsShown() then
         HookMouseWheel(SpellBookFrame, SpellBookHandler)
     end
+
+    if ItemTextFrame and ItemTextFrame:IsShown() then
+        HookMouseWheel(ItemTextFrame, ItemTextHandler)
+    end
 end
 
 -- =========================
@@ -143,6 +154,8 @@ f:RegisterEvent("QUEST_DETAIL")
 f:RegisterEvent("QUEST_PROGRESS")
 f:RegisterEvent("QUEST_COMPLETE")
 f:RegisterEvent("SPELLS_CHANGED")
+f:RegisterEvent("ITEM_TEXT_BEGIN")
+f:RegisterEvent("ITEM_TEXT_READY")
 
 f:SetScript("OnEvent", function()
     TryHookFrames()
