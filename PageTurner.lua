@@ -4,37 +4,63 @@
 -- Scroll UP   = Previous page
 -- BlizzMo-safe (Ctrl+Scroll untouched)
 
-local hookedFrames = {}
+local hookStates = {}
 
 -- =========================
 -- Utility
 -- =========================
 
 local function HookMouseWheel(frame, handler)
-    if not frame or hookedFrames[frame] then return end
+    if not frame or not handler then return end
     if not frame.EnableMouseWheel then return end
 
+    local state = hookStates[frame]
+    if not state then
+        state = {}
+        hookStates[frame] = state
+    end
+
+    state.handler = handler
     frame:EnableMouseWheel(true)
 
-    local original = frame:GetScript("OnMouseWheel")
+    if not state.wrapper then
+        state.wrapper = function()
+            -- Prevent wrapper cycles when multiple addons re-hook OnMouseWheel.
+            if state.running then return end
+            state.running = true
 
-    frame:SetScript("OnMouseWheel", function()
-        -- Allow BlizzMo scaling
-        if IsControlKeyDown() then
-            if original then original() end
-            return
+            local ok, err = pcall(function()
+                -- Allow BlizzMo scaling
+                if IsControlKeyDown() then
+                    if state.original and state.original ~= state.wrapper then
+                        state.original()
+                    end
+                    return
+                end
+
+                -- PageTurner logic
+                if state.handler and state.handler() then
+                    return
+                end
+
+                -- Fallback
+                if state.original and state.original ~= state.wrapper then
+                    state.original()
+                end
+            end)
+
+            state.running = false
+            if not ok then
+                error(err)
+            end
         end
+    end
 
-        -- PageTurner logic
-        if handler() then
-            return
-        end
-
-        -- Fallback
-        if original then original() end
-    end)
-
-    hookedFrames[frame] = true
+    local current = frame:GetScript("OnMouseWheel")
+    if current ~= state.wrapper then
+        state.original = current
+        frame:SetScript("OnMouseWheel", state.wrapper)
+    end
 end
 
 local function ClickIfEnabled(button)
@@ -44,6 +70,15 @@ local function ClickIfEnabled(button)
     end
 end
 
+local function HandlePagedButtons(nextButton, prevButton)
+    local delta = arg1
+    if not delta or delta == 0 then return end
+    if delta < 0 then
+        return ClickIfEnabled(nextButton)
+    end
+    return ClickIfEnabled(prevButton)
+end
+
 -- =========================
 -- Handlers
 -- =========================
@@ -51,59 +86,31 @@ end
 -- arg1 > 0  → scroll UP    → PREV page
 
 local function MerchantHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(MerchantNextPageButton)
-    else
-        return ClickIfEnabled(MerchantPrevPageButton)
-    end
+    return HandlePagedButtons(MerchantNextPageButton, MerchantPrevPageButton)
 end
 
 local function MailHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(InboxNextPageButton)
-    else
-        return ClickIfEnabled(InboxPrevPageButton)
-    end
+    return HandlePagedButtons(InboxNextPageButton, InboxPrevPageButton)
 end
 
 local function GossipHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(GossipNextPageButton)
-    else
-        return ClickIfEnabled(GossipPrevPageButton)
-    end
+    return HandlePagedButtons(GossipNextPageButton, GossipPrevPageButton)
 end
 
 local function QuestHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(QuestFrameNextButton)
-    else
-        return ClickIfEnabled(QuestFramePrevButton)
-    end
+    return HandlePagedButtons(QuestFrameNextButton, QuestFramePrevButton)
 end
 
 local function BookHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(BookNextPageButton)
-    else
-        return ClickIfEnabled(BookPrevPageButton)
-    end
+    return HandlePagedButtons(BookNextPageButton, BookPrevPageButton)
 end
 
 local function SpellBookHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(SpellBookNextPageButton)
-    else
-        return ClickIfEnabled(SpellBookPrevPageButton)
-    end
+    return HandlePagedButtons(SpellBookNextPageButton, SpellBookPrevPageButton)
 end
 
 local function ItemTextHandler()
-    if arg1 < 0 then
-        return ClickIfEnabled(ItemTextNextPageButton)
-    else
-        return ClickIfEnabled(ItemTextPrevPageButton)
-    end
+    return HandlePagedButtons(ItemTextNextPageButton, ItemTextPrevPageButton)
 end
 
 -- =========================
@@ -158,5 +165,13 @@ f:RegisterEvent("ITEM_TEXT_BEGIN")
 f:RegisterEvent("ITEM_TEXT_READY")
 
 f:SetScript("OnEvent", function()
+    TryHookFrames()
+end)
+
+local elapsed = 0
+f:SetScript("OnUpdate", function()
+    elapsed = elapsed + arg1
+    if elapsed < 0.5 then return end
+    elapsed = 0
     TryHookFrames()
 end)
